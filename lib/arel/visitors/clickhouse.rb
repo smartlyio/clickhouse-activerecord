@@ -136,6 +136,30 @@ module Arel
         end
       end
 
+      def visit_Arel_Nodes_MapAccess(o, collector)
+        visit(o.left, collector)
+        collector << '['
+        visit(o.right, collector)
+        collector << ']'
+      end
+
+      def visit_Arel_Nodes_Lambda(o, collector)
+        if o.left.is_a?(Array)
+          collector << '('
+          o.left.each_with_index do |arg, i|
+            collector << ', ' unless i.zero?
+            collector << arg.to_s
+          end
+          collector << ')'
+        else
+          collector << o.left.to_s
+        end
+
+        collector << ' -> '
+
+        visit(o.right, collector)
+      end
+
       def sanitize_as_setting_value(value)
         if value == :default
           'DEFAULT'
