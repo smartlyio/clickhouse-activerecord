@@ -258,6 +258,29 @@ Action.with(ActionView.select(Arel.sql('min(date)')) => :min_date).where(Arel.sq
 #=> #<ActiveRecord::Relation [#<Action *** >]>
 ```
 
+### Map access and lambda (Arel)
+
+The ClickHouse Arel visitor supports `Arel::Nodes::MapAccess` for `map[key]` expressions and `Arel::Nodes::Lambda` for `(args) -> body` lambda syntax (for example in higher-order functions).
+
+```ruby
+table = Arel::Table.new(:items)
+
+# items.attrs['key']
+map_lookup = Arel::Nodes::MapAccess.new(table[:attrs], Arel.sql("'key'"))
+Action.connection.visitor.compile(map_lookup)
+#=> "items.attrs['key']"
+
+# (id, extension) -> concat(lower(id), extension)
+lam = Arel::Nodes::Lambda.new(
+  %w[id extension],
+  Arel.sql('concat(lower(id), extension)')
+)
+Action.connection.visitor.compile(lam)
+#=> "(id, extension) -> concat(lower(id), extension)"
+```
+
+Use a string for the left side of `Lambda` when you already have a full parameter list (including parentheses), or pass an array of argument names to build `(arg1, arg2, ...)`.
+
 ### Streaming request
 
 ```ruby
