@@ -5,11 +5,13 @@ module ActiveRecord
     module Clickhouse
       module OID # :nodoc:
         class Map < Type::Value # :nodoc:
-
           def initialize(sql_type)
             case sql_type
             when /U?Int(\d+)/
               @subtype = :integer
+              @limit = bits_to_limit(Regexp.last_match(1)&.to_i)
+            when /U?Float(\d+)/
+              @subtype = :float
               @limit = bits_to_limit(Regexp.last_match(1)&.to_i)
             when /DateTime/
               @subtype = :datetime
@@ -34,6 +36,8 @@ module ActiveRecord
               case @subtype
                 when :integer
                   value.to_i
+                when :float
+                  value.to_f
                 when :datetime
                   ::DateTime.parse(value)
                 when :date
@@ -54,6 +58,8 @@ module ActiveRecord
               case @subtype
                 when :integer
                   value.to_i
+                when :float
+                  value.to_f
                 when :datetime
                   DateTime.new.serialize(value)
                 when :date
