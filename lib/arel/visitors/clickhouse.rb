@@ -11,7 +11,8 @@ module Arel
 
       def aggregate(name, o, collector)
         # replacing function name for materialized view
-        if o.expressions.first && o.expressions.first != '*' && !o.expressions.first.is_a?(String) && o.expressions.first.relation&.is_view
+        expression = o.expressions.first
+        if expression && expression != '*' && !expression.is_a?(String) && expression.try(:relation)&.is_view
           super("#{name.downcase}Merge", o, collector)
         else
           super
