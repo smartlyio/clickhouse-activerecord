@@ -1,9 +1,9 @@
 module CoreExtensions
   module Arel # :nodoc: all
     module Nodes
-      class Ordering
+      module Ordering
         def with_fill(from: nil, to: nil, step: nil)
-          OrderWithFill.new(self, from: from, to: to, step: step)
+          ::Arel::Nodes::OrderWithFill.new(self, from: from, to: to, step: step)
         end
       end
     end
