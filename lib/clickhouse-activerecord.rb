@@ -8,6 +8,7 @@ require 'core_extensions/active_record/schema_migration'
 require 'core_extensions/active_record/migration/command_recorder'
 require 'core_extensions/arel/nodes/select_core'
 require 'core_extensions/arel/nodes/select_statement'
+require 'core_extensions/arel/nodes/ordering'
 require 'core_extensions/arel/select_manager'
 require 'core_extensions/arel/table'
 
@@ -28,6 +29,7 @@ module ClickhouseActiverecord
 
     Arel::Nodes::SelectCore.prepend(CoreExtensions::Arel::Nodes::SelectCore)
     Arel::Nodes::SelectStatement.prepend(CoreExtensions::Arel::Nodes::SelectStatement)
+    Arel::Nodes::Ordering.prepend(CoreExtensions::Arel::Nodes::Ordering)
     Arel::SelectManager.prepend(CoreExtensions::Arel::SelectManager)
     Arel::Table.prepend(CoreExtensions::Arel::Table)
   end

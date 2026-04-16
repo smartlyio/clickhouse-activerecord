@@ -161,6 +161,24 @@ module Arel
         visit(o.right, collector)
       end
 
+      def visit_Arel_Nodes_OrderWithFill(o, collector)
+        visit(o.expr, collector)
+        collector << ' WITH FILL'
+        if o.from_expr
+          collector << ' FROM '
+          visit(o.from_expr, collector)
+        end
+        if o.to_expr
+          collector << ' TO '
+          visit(o.to_expr, collector)
+        end
+        if o.step_expr
+          collector << ' STEP '
+          visit(o.step_expr, collector)
+        end
+        collector
+      end
+
       def sanitize_as_setting_value(value)
         if value == :default
           'DEFAULT'
