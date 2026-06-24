@@ -5,18 +5,25 @@ module ActiveRecord
     module Clickhouse
       module OID # :nodoc:
         class Array < Type::Value # :nodoc:
+          JSON_ARRAY_TYPE = /Array\((?:Nullable\()?JSON(?:\))?\)/i
 
           def initialize(sql_type)
-            @subtype = case sql_type
-                       when /U?Int\d+/
-                         :integer
-                       when /DateTime/
-                         :datetime
-                       when /Date/
-                         :date
+            @json_type = ActiveRecord::Type::Json.new if sql_type.match?(JSON_ARRAY_TYPE)
+
+            @subtype = if @json_type
+                         :json
                        else
-                         :string
-            end
+                         case sql_type
+                         when /U?Int\d+/
+                           :integer
+                         when /DateTime/
+                           :datetime
+                         when /Date/
+                           :date
+                         else
+                           :string
+                         end
+                       end
           end
 
           def type
@@ -29,12 +36,14 @@ module ActiveRecord
             else
               return value if value.nil?
               case @subtype
-                when :integer
-                  value.to_i
-                when :datetime
-                  ::DateTime.parse(value)
-                when :date
-                  ::Date.parse(value)
+              when :integer
+                value.to_i
+              when :datetime
+                ::DateTime.parse(value)
+              when :date
+                ::Date.parse(value)
+              when :json
+                @json_type.deserialize(value)
               else
                 super
               end
@@ -47,12 +56,14 @@ module ActiveRecord
             else
               return value if value.nil?
               case @subtype
-                when :integer
-                  value.to_i
-                when :datetime
-                  DateTime.new.serialize(value)
-                when :date
-                  Date.new.serialize(value)
+              when :integer
+                value.to_i
+              when :datetime
+                DateTime.new.serialize(value)
+              when :date
+                Date.new.serialize(value)
+              when :json
+                @json_type.serialize(value)
               else
                 super
               end
