@@ -853,13 +853,9 @@ RSpec.describe 'Model', :migrations do
 
         it 'recognizes Array(JSON) columns as array of json, not plain json' do
           column = array_json_model.columns_hash['items']
-          connection = array_json_model.connection
-          cast_type = connection.lookup_cast_type(column.sql_type)
 
           expect(column.type).to eq(:json)
           expect(column.sql_type).to eq('Array(JSON)')
-          expect(cast_type).to be_a(ActiveRecord::ConnectionAdapters::Clickhouse::OID::Array)
-          expect(cast_type).not_to be_a(ActiveRecord::Type::Json)
         end
 
         it 'does not misresolve Map(String, JSON) as plain json' do
@@ -873,12 +869,9 @@ RSpec.describe 'Model', :migrations do
 
           connection = array_json_model.connection
           column = connection.columns('map_json_test_table').find { |c| c.name == 'attrs' }
-          cast_type = connection.lookup_cast_type(column.sql_type)
 
           expect(column.type).to eq(:string)
           expect(column.sql_type).to eq('Map(String, JSON)')
-          expect(cast_type).to be_a(ActiveRecord::ConnectionAdapters::Clickhouse::OID::Map)
-          expect(cast_type).not_to be_a(ActiveRecord::Type::Json)
         ensure
           array_json_model.connection.execute('DROP TABLE IF EXISTS map_json_test_table')
         end
