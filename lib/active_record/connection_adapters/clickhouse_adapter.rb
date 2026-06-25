@@ -542,6 +542,10 @@ module ActiveRecord
         sql
       end
 
+      def high_precision_current_timestamp
+        "now()"
+      end
+
       protected
 
       def last_inserted_id(result)
