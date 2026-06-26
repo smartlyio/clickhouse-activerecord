@@ -256,16 +256,10 @@ module ActiveRecord
 
           m.register_type %r(bool)i, ActiveModel::Type::Boolean.new
           m.register_type %r{uuid}i, Clickhouse::OID::Uuid.new
-          # register_class_with_limit m, %r(Array), Clickhouse::OID::Array
-          m.register_type(%r(Array)) do |sql_type|
-            Clickhouse::OID::Array.new(sql_type)
-          end
+          m.register_type %r{\A(?:Nullable\()?JSON(?:\))?\z}i, ActiveRecord::Type::Json.new
 
-          m.register_type(%r(Map)) do |sql_type|
-            Clickhouse::OID::Map.new(sql_type)
-          end
-
-          m.register_type %r(JSON)i, ActiveRecord::Type::Json.new
+          m.register_type(%r(Array)) { |sql_type| Clickhouse::OID::Array.new(sql_type) }
+          m.register_type(%r(Map)) { |sql_type| Clickhouse::OID::Map.new(sql_type) }
         end
       end
 
@@ -546,6 +540,10 @@ module ActiveRecord
       def build_insert_sql(insert) # :nodoc:
         sql = +"INSERT #{insert.into} #{insert.values_list}"
         sql
+      end
+
+      def high_precision_current_timestamp
+        "now()"
       end
 
       protected

@@ -829,6 +829,62 @@ RSpec.describe 'Model', :migrations do
           json_model.connection.execute('DROP TABLE IF EXISTS migration_json_test')
         end
       end
+
+      describe 'Array(JSON) column type' do
+        let!(:array_json_model) do
+          Class.new(ActiveRecord::Base) do
+            self.table_name = 'array_json_test_table'
+          end
+        end
+
+        before do
+          array_json_model.connection.execute('DROP TABLE IF EXISTS array_json_test_table')
+          array_json_model.connection.execute(<<~SQL, nil, settings: { allow_experimental_json_type: 1 })
+            CREATE TABLE array_json_test_table (
+              id UInt64,
+              items Array(JSON)
+            ) ENGINE = MergeTree ORDER BY id
+          SQL
+        end
+
+        after do
+          array_json_model.connection.execute('DROP TABLE IF EXISTS array_json_test_table')
+        end
+
+        it 'recognizes Array(JSON) columns as array of json, not plain json' do
+          column = array_json_model.columns_hash['items']
+
+          expect(column.type).to eq(:json)
+          expect(column.sql_type).to eq('Array(JSON)')
+        end
+
+        it 'does not misresolve Map(String, JSON) as plain json' do
+          array_json_model.connection.execute('DROP TABLE IF EXISTS map_json_test_table')
+          array_json_model.connection.execute(<<~SQL, nil, settings: { allow_experimental_json_type: 1 })
+            CREATE TABLE map_json_test_table (
+              id UInt64,
+              attrs Map(String, JSON)
+            ) ENGINE = MergeTree ORDER BY id
+          SQL
+
+          connection = array_json_model.connection
+          column = connection.columns('map_json_test_table').find { |c| c.name == 'attrs' }
+
+          expect(column.type).to eq(:string)
+          expect(column.sql_type).to eq('Map(String, JSON)')
+        ensure
+          array_json_model.connection.execute('DROP TABLE IF EXISTS map_json_test_table')
+        end
+
+        it 'reads and writes Array(JSON) values' do
+          items = [{ 'key' => 'value' }, { 'count' => '42' }]
+
+          array_json_model.create!(id: 1, items: items)
+
+          record = array_json_model.first
+          expect(record.items).to eq(items)
+        end
+      end
     end
   end
 end
