@@ -66,10 +66,12 @@ module ActiveRecord
               statement = Statement.new(sql, format: response_format)
               result = nil
               @lock.synchronize do
-                req = Net::HTTP::Post.new("/?#{settings_params(settings)}", build_request_headers)
-                @connection.start unless @connection.started?
-                @connection.request(req, statement.formatted_sql) do |response|
-                  result = statement.streaming_response(response)
+                with_stale_connection_retry do
+                  req = Net::HTTP::Post.new("/?#{settings_params(settings)}", build_request_headers)
+                  @connection.start unless @connection.started?
+                  @connection.request(req, statement.formatted_sql) do |response|
+                    result = statement.streaming_response(response)
+                  end
                 end
               end
               result
@@ -314,10 +316,45 @@ module ActiveRecord
         # @return [Net::HTTPResponse]
         def request(statement, settings: {}, except_params: [])
           @lock.synchronize do
-            @connection.post("/?#{settings_params(settings, except: except_params)}",
-                             statement.formatted_sql,
-                             build_request_headers(include_database: !except_params.include?(:database)))
+            with_stale_connection_retry do
+              @connection.post("/?#{settings_params(settings, except: except_params)}",
+                               statement.formatted_sql,
+                               build_request_headers(include_database: !except_params.include?(:database)))
+            end
           end
+        end
+
+        # Errors raised by `Net::HTTP` when the persistent keep-alive socket was
+        # closed by the peer (ClickHouse, or an LB/proxy in front of it) between
+        # requests. `Net::HTTP` retries idempotent methods once on these but
+        # never retries `POST`, so all our writes surface the error.
+        STALE_CONNECTION_ERRORS = [EOFError, Errno::ECONNRESET, Errno::EPIPE, IOError].freeze
+
+        # Yield the given block once; on a stale-keepalive error, reopen the
+        # socket and retry exactly once. A second failure re-raises the original
+        # exception so callers see the same class of error as before.
+        def with_stale_connection_retry
+          attempts = 0
+          begin
+            yield
+          rescue *STALE_CONNECTION_ERRORS => e
+            attempts += 1
+            raise if attempts > 1
+            logger&.debug("[clickhouse] retrying request after stale connection: #{e.class}: #{e.message}")
+            reconnect_stale_connection!
+            retry
+          end
+        end
+
+        # Drop the current socket (if any) and open a fresh one via `connect`.
+        # Used only by the stale-connection retry path so it stays independent
+        # of the public `reconnect` / `disconnect!` code paths.
+        def reconnect_stale_connection!
+          @connection.finish if @connection&.started?
+        rescue IOError
+          # already closed by the peer; nothing to do
+        ensure
+          connect
         end
 
         def log_with_debug(sql, name = nil)
