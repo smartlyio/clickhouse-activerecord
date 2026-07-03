@@ -37,14 +37,14 @@ module ActiveRecord
         #   end
         #   # sends and executes "SELECT * FROM table"
         def with_response_format(format)
-          prev_format = @response_format
-          @response_format = format
+          stack = response_format_stack
+          stack.push(format)
           yield
         ensure
-          @response_format = prev_format
+          stack.pop
         end
 
-        def execute(sql, name = nil, format: @response_format, settings: {})
+        def execute(sql, name = nil, format: response_format, settings: {})
           with_response_format(format) do
             log(sql, [adapter_name, name].compact.join(' ')) do
               raw_execute(sql, settings: settings)
@@ -60,10 +60,10 @@ module ActiveRecord
 
         # Execute an SQL query and save the result to a file in stream mode
         # @return [Tempfile]
-        def execute_to_file(sql, name = nil, format: @response_format, settings: {})
+        def execute_to_file(sql, name = nil, format: response_format, settings: {})
           with_response_format(format) do
             log(sql, [adapter_name, 'Stream', name].compact.join(' ')) do
-              statement = Statement.new(sql, format: @response_format)
+              statement = Statement.new(sql, format: response_format)
               result = nil
               @lock.synchronize do
                 req = Net::HTTP::Post.new("/?#{settings_params(settings)}", build_request_headers)
@@ -113,7 +113,7 @@ module ActiveRecord
         # @link https://clickhouse.com/docs/en/sql-reference/statements/delete
         def exec_delete(sql, name = nil, _binds = [])
           log(sql, "#{adapter_name} #{name}") do
-            statement = Statement.new(sql, format: @response_format)
+            statement = Statement.new(sql, format: response_format)
             res = request(statement)
             begin
               data = JSON.parse(res.header['x-clickhouse-summary'])
@@ -241,11 +241,23 @@ module ActiveRecord
           result = do_system_execute("DESCRIBE TABLE `#{table_name}`", table_name)
           data = result['data']
 
-          return data unless data.empty?
+          raise ActiveRecord::StatementInvalid, "Could not find table '#{table_name}'" if data.empty?
 
-          raise ActiveRecord::StatementInvalid, "Could not find table '#{table_name}'"
+          data.map do |row|
+            Clickhouse::DescribedColumn.new(
+              name: row[0],
+              sql_type: row[1],
+              default_type: row[2],
+              default_expression: row[3],
+              comment: row[4],
+              codec: row[5],
+            )
+          end
         end
-        alias column_definitions table_structure
+
+        def column_definitions(table_name)
+          table_structure(table_name).reject(&:ephemeral?)
+        end
 
         private
 
@@ -258,18 +270,17 @@ module ActiveRecord
         end
 
         def new_column_from_field(table_name, field, _definitions)
-          column_name, sql_type, default_type, default_expression = field
-          type_metadata = fetch_type_metadata(sql_type)
-          default_value = extract_value_from_default(default_expression, default_type)
-          default_function = extract_default_function(default_expression)
-          cast_type = lookup_cast_type(sql_type)
+          type_metadata = fetch_type_metadata(field.sql_type)
+          default_value = extract_value_from_default(field.default_expression, field.default_type)
+          default_function = extract_default_function(field.default_expression)
+          cast_type = lookup_cast_type(field.sql_type)
           default_value = cast_type.cast(default_value)
 
-          args = [column_name]
+          args = [field.name]
           args << cast_type if ::ActiveRecord::version >= Gem::Version.new('8.1')
-          args += [default_value, type_metadata, field[1].include?('Nullable'), default_function]
+          args += [default_value, type_metadata, field.sql_type.include?('Nullable'), default_function]
 
-          Clickhouse::Column.new(*args, codec: field[5].presence)
+          Clickhouse::Column.new(*args, codec: field.codec.presence, default_kind: field.default_type)
         end
 
         def extract_value_from_default(default_expression, default_type)
@@ -291,7 +302,7 @@ module ActiveRecord
         end
 
         def raw_execute(sql, settings: {}, except_params: [])
-          statement = Statement.new(sql, format: @response_format)
+          statement = Statement.new(sql, format: response_format)
           response = request(statement, settings: settings, except_params: except_params)
           statement.processed_response(response)
         end
@@ -312,6 +323,19 @@ module ActiveRecord
         def log_with_debug(sql, name = nil)
           return yield unless @debug
           log(sql, "#{name} (system)") { yield }
+        end
+
+        # The response format that should be applied to the next request.
+        # Reads the per-thread override pushed by `with_response_format`, falling
+        # back to the adapter-level default when no override is in scope.
+        def response_format
+          stack = response_format_stack
+          stack.empty? ? @default_response_format : stack.last
+        end
+
+        def response_format_stack
+          key = (@response_format_stack_key ||= :"clickhouse_response_format_stack_#{object_id}")
+          Thread.current[key] ||= []
         end
 
         def settings_params(settings = {}, except: [])

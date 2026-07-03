@@ -23,6 +23,7 @@ require 'active_record/connection_adapters/clickhouse/statement'
 require 'active_record/connection_adapters/clickhouse/table_definition'
 require 'net/http'
 require 'openssl'
+require 'uri'
 
 module ActiveRecord
   class Base
@@ -30,6 +31,11 @@ module ActiveRecord
       # Establishes a connection to the database that's used by all Active Record objects
       def clickhouse_connection(config)
         config = config.symbolize_keys
+
+        if config[:url]
+          url_config = ConnectionAdapters::ClickhouseAdapter.parse_clickhouse_url(config.delete(:url))
+          config = url_config.merge(config)
+        end
 
         unless config.key?(:database)
           raise ArgumentError, 'No database specified. Missing argument: database.'
@@ -131,6 +137,11 @@ module ActiveRecord
 
       # Initializes and connects a Clickhouse adapter.
       def initialize(config_or_deprecated_connection, deprecated_logger = nil, deprecated_connection_options = nil, deprecated_config = nil)
+        if config_or_deprecated_connection.is_a?(Hash) && config_or_deprecated_connection[:url]
+          config_or_deprecated_connection = config_or_deprecated_connection.dup
+          url_config = self.class.parse_clickhouse_url(config_or_deprecated_connection.delete(:url))
+          config_or_deprecated_connection = url_config.merge(config_or_deprecated_connection)
+        end
         super
         if @config[:connection]
           connection = {
@@ -152,7 +163,7 @@ module ActiveRecord
 
         @connection_config = { user: @config[:username], password: @config[:password], database: @config[:database] }.compact
         @debug = @config[:debug] || false
-        @response_format = @config[:format] || DEFAULT_RESPONSE_FORMAT
+        @default_response_format = @config[:format] || DEFAULT_RESPONSE_FORMAT
         @http_auth = @config[:http_auth]&.to_sym
 
         @prepared_statements = false
@@ -201,6 +212,37 @@ module ActiveRecord
       end
 
       class << self
+        def parse_clickhouse_url(url)
+          uri = URI.parse(url)
+          config = {}
+
+          config[:host]     = uri.host                                    if uri.host
+          config[:port]     = uri.port                                    if uri.port
+          config[:username] = URI.decode_www_form_component(uri.user)     if uri.user
+          config[:password] = URI.decode_www_form_component(uri.password) if uri.password
+
+          if uri.path && uri.path.length > 1
+            config[:database] = uri.path.delete_prefix('/')
+          end
+
+          if uri.query
+            URI.decode_www_form(uri.query).each do |key, value|
+              case key
+              when 'ssl'                then config[:ssl]                = (value == 'true')
+              when 'debug'              then config[:debug]              = (value == 'true')
+              when 'read_timeout'       then config[:read_timeout]       = value.to_i
+              when 'write_timeout'      then config[:write_timeout]      = value.to_i
+              when 'keep_alive_timeout' then config[:keep_alive_timeout] = value.to_i
+              when 'http_auth'          then config[:http_auth]          = value
+              when 'cluster_name'       then config[:cluster_name]       = value
+              when 'sslca'              then config[:sslca]              = value
+              end
+            end
+          end
+
+          config
+        end
+
         def extract_limit(sql_type) # :nodoc:
           case sql_type
             when /(Nullable)?\(?String\)?/
@@ -309,7 +351,7 @@ module ActiveRecord
         end
 
         pk = table_structure(table_name).first
-        return ['id'] if pk.present? && pk[0] == 'id'
+        return ['id'] if pk.present? && pk.name == 'id'
         []
       end
 
@@ -431,9 +473,9 @@ module ActiveRecord
       end
 
       def change_column_null(table_name, column_name, null, default = nil)
-        structure = table_structure(table_name).select{|v| v[0] == column_name.to_s}.first
+        structure = table_structure(table_name).find { |col| col.name == column_name.to_s }
         raise "Column #{column_name} not found in table #{table_name}" if structure.nil?
-        change_column table_name, column_name, structure[1].gsub(/(Nullable\()?(.*?)\)?/, '\2'), {null: null, default: default}.compact
+        change_column table_name, column_name, structure.sql_type.gsub(/(Nullable\()?(.*?)\)?/, '\2'), {null: null, default: default}.compact
       end
 
       def change_column_default(table_name, column_name, default)
@@ -548,8 +590,13 @@ module ActiveRecord
 
       protected
 
-      def last_inserted_id(result)
-        result
+      def last_inserted_id(_result)
+        # Rails 7.1 persistence.rb:1258:
+        # _write_attribute(column, value)  # wrote true directly — ugly but no crash
+
+        # Rails 8.0 persistence.rb:933:
+        # _write_attribute(column, type_for_attribute(column).deserialize(value))  # now deserializes first
+        nil
       end
 
       def change_column_for_alter(table_name, column_name, type, **options)
