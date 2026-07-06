@@ -1,3 +1,7 @@
+### Unreleased
+
+* Retry POST requests once after reconnecting when the persistent keep-alive socket was closed by the peer (fixes intermittent `EOFError: end of file reached` on writes)
+
 ### Version 1.6.7 (Mar 5, 2026)
 
 * Fix insert with default values in Ruby 4.0 and Rails 8.1
