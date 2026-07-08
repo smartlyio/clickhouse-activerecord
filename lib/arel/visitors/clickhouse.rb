@@ -9,6 +9,14 @@ module Arel
         super
       end
 
+      # TreeManager#to_sql calls #accept directly (not #compile), so the
+      # UPDATE/DELETE flag must be reset here too, otherwise it leaks into
+      # subsequent SELECTs and drops table-name qualifiers. See issue #243.
+      def accept(node, collector = Arel::Collectors::SQLString.new)
+        @delete_or_update = false
+        super
+      end
+
       def aggregate(name, o, collector)
         # replacing function name for materialized view
         expression = o.expressions.first
