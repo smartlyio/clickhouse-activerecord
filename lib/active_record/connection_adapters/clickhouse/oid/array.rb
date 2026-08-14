@@ -16,6 +16,8 @@ module ActiveRecord
                          case sql_type
                          when /U?Int\d+/
                            :integer
+                         when /U?Float\d+/
+                           :float
                          when /DateTime/
                            :datetime
                          when /Date/
@@ -38,6 +40,8 @@ module ActiveRecord
               case @subtype
               when :integer
                 value.to_i
+              when :float
+                value.to_f
               when :datetime
                 ::DateTime.parse(value)
               when :date
@@ -58,6 +62,8 @@ module ActiveRecord
               case @subtype
               when :integer
                 value.to_i
+              when :float
+                value.to_f
               when :datetime
                 DateTime.new.serialize(value)
               when :date
