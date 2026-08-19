@@ -9,7 +9,6 @@ module ActiveRecord
 
           def initialize(sql_type)
             @json_type = ActiveRecord::Type::Json.new if sql_type.match?(JSON_ARRAY_TYPE)
-
             @subtype = if @json_type
                          :json
                        else
@@ -22,6 +21,8 @@ module ActiveRecord
                            :datetime
                          when /Date/
                            :date
+                         when /Bool/
+                           :bool
                          else
                            :string
                          end
@@ -48,6 +49,8 @@ module ActiveRecord
                 ::Date.parse(value)
               when :json
                 @json_type.deserialize(value)
+              when :bool
+                JSON.parse(value.to_s)
               else
                 super
               end
@@ -70,6 +73,8 @@ module ActiveRecord
                 Date.new.serialize(value)
               when :json
                 @json_type.serialize(value)
+              when :bool
+                JSON.parse(value.to_s)
               else
                 super
               end
