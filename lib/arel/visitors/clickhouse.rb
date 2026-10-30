@@ -98,6 +98,13 @@ module Arel
         collector
       end
 
+      # https://clickhouse.com/docs/sql-reference/statements/select/prewhere
+      def visit_Arel_Nodes_Prewhere(o, collector)
+        visit o.left, collector
+        collector << ' PREWHERE '
+        visit o.right, collector
+      end
+
       def visit_Arel_Nodes_GroupingSets(o, collector)
         collector << 'GROUPING SETS '
         grouping_array_or_grouping_element(o.expr, collector)

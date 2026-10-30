@@ -1,5 +1,7 @@
 ### Unreleased
 
+* Add `Arel::SelectManager#prewhere` for the PREWHERE clause
+
 * Retry POST requests once after reconnecting when the persistent keep-alive socket was closed by the peer (fixes intermittent `EOFError: end of file reached` on writes)
 
 ### Version 1.6.7 (Mar 5, 2026)
