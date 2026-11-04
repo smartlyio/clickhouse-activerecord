@@ -667,6 +667,56 @@ RSpec.describe 'Model', :migrations do
     end
   end
 
+  context 'array with boolean' do
+    let!(:model) do
+      Class.new(ActiveRecord::Base) do
+        self.table_name = 'array_boolean_test'
+      end
+    end
+
+    before do
+      migrations_dir = File.join(FIXTURES_PATH, 'migrations', 'add_array_boolean')
+      quietly { ActiveRecord::MigrationContext.new(migrations_dir).up }
+    end
+
+    describe 'Boolean subtype support' do
+      it 'creates and retrieves Boolean array values' do
+        model.create!(array_boolean: [true, false], date: date)
+        record = model.first
+
+        expect(record.array_boolean).to be_a Array
+        expect(record.array_boolean).to eq([true, false])
+      end
+
+      it 'insert with insert_all' do
+        model.insert_all([{ array_boolean: [true, false], date: date }])
+
+        record = model.first
+        expect(record.array_boolean).to eq([true, false])
+      end
+
+      it 'retrieves boolean values without quoting in SQL' do
+        model.connection.insert("INSERT INTO #{model.table_name} (id, array_boolean, date) VALUES (1, [true, false], '2026-08-19')")
+
+        record = model.first
+        expect(record.array_boolean).to eq([true, false])
+      end
+    end
+
+    describe 'deserialize' do
+      it 'deserializes string boolean values from array boolean type' do
+        type = model.type_for_attribute('array_boolean')
+        expect(type.type).to eq(:bool)
+        expect(type.deserialize(['true', 'false'])).to eq([true, false])
+      end
+
+      it 'serializes boolean array values as booleans' do
+        type = model.type_for_attribute('array_boolean')
+        expect(type.serialize([true, 'false'])).to eq([true, false])
+      end
+    end
+  end
+
   context 'map' do
     let!(:model) do
       Class.new(ActiveRecord::Base) do
