@@ -22,15 +22,15 @@ jobs:
       max-parallel: 1
       matrix:
         version:
-          - ruby: 3.2
+          - ruby: 3.3.14
             rails: 7.2.3
-          - ruby: 3.2
+          - ruby: 3.3.14
             rails: 8.0.1
-          - ruby: 3.2
+          - ruby: 3.3.14
             rails: 8.1
-          - ruby: 4.0
+          - ruby: 4.0.10
             rails: 7.2.3
-          - ruby: 4.0
+          - ruby: 4.0.10
             rails: 8.1
         clickhouse: [ '24.6', '24.9', '25.10' ]
 
@@ -71,13 +71,13 @@ jobs:
       max-parallel: 1
       matrix:
         version:
-          - ruby: 3.2
+          - ruby: 3.3.14
             rails: 7.2.1
-          - ruby: 3.2
+          - ruby: 3.3.14
             rails: 8.0.1
-          - ruby: 3.2
+          - ruby: 3.3.14
             rails: 8.1
-          - ruby: 4.0
+          - ruby: 4.0.10
             rails: 8.1
         clickhouse: [ '24.9', '25.10' ]
 
